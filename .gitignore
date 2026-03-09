@@ -1,0 +1,19 @@
+# Secrets — never commit
+.env
+
+# Tesla auth token (contains OAuth credentials)
+.tesla_token.json
+cache.json
+
+# Runtime state (charging session progress)
+.charge_state.json
+
+# Logs
+alarm.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
