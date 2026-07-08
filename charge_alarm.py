@@ -237,19 +237,27 @@ def check_once(state):
             timer_end = session_start + timedelta(minutes=TIMER_MINUTES)
             print(f"New session — timer set for {timer_end.strftime('%H:%M')}")
 
-    # ── Timer ─────────────────────────────────────────────────────────────────
-    if timer_end and not notified["timer"] and datetime.now() >= timer_end:
+    # ── Timer (emergency siren only while actively charging; a plugged-in car
+    # that already finished or paused gets a normal push instead) ─────────────
+    if (
+        cs["state"] != "Disconnected"
+        and timer_end and not notified["timer"] and datetime.now() >= timer_end
+    ):
         if send_pushover(
             f"Tesla — {TIMER_MINUTES // 60}hr Timer",
             f"Your {TIMER_MINUTES}-minute charge timer has elapsed!",
+            emergency=(cs["state"] == "Charging"),
         ):
             notified["timer"] = True
 
-    # ── Charging complete ─────────────────────────────────────────────────────
-    if cs["state"] == "Complete" and not notified["complete"]:
+    # ── Charging complete (normal push, not emergency — the car is plugged in
+    # but no longer charging, so nothing is urgent; only on the transition out
+    # of Charging so a long-parked car at Complete doesn't re-notify) ─────────
+    if cs["state"] == "Complete" and last_state == "Charging" and not notified["complete"]:
         if send_pushover(
             "Tesla Fully Charged",
             f"Battery at {cs['level']}% — charging complete!",
+            emergency=False,
         ):
             notified["complete"] = True
 
