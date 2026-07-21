@@ -90,10 +90,9 @@ def send_pushover(title, body, emergency=True):
         "user":    PUSHOVER_USER,
         "title":   title,
         "message": body,
-        "sound":   "siren",
     }
     if emergency:
-        payload.update({"priority": 2, "retry": 30, "expire": 3600})
+        payload.update({"priority": 2, "retry": 30, "expire": 3600, "sound": "siren"})
     else:
         payload["priority"] = 0
 
@@ -237,27 +236,29 @@ def check_once(state):
             timer_end = session_start + timedelta(minutes=TIMER_MINUTES)
             print(f"New session — timer set for {timer_end.strftime('%H:%M')}")
 
-    # ── Timer (emergency siren only while actively charging; a plugged-in car
-    # that already finished or paused gets a normal push instead) ─────────────
-    if (
-        cs["state"] != "Disconnected"
-        and timer_end and not notified["timer"] and datetime.now() >= timer_end
-    ):
-        if send_pushover(
-            f"Tesla — {TIMER_MINUTES // 60}hr Timer",
-            f"Your {TIMER_MINUTES}-minute charge timer has elapsed!",
-            emergency=(cs["state"] == "Charging"),
-        ):
+    # ── Timer (only while actively charging — if charging already stopped or
+    # finished, the timer elapsing is a non-event and must stay silent) ───────
+    if timer_end and not notified["timer"] and datetime.now() >= timer_end:
+        if cs["state"] == "Charging":
+            if send_pushover(
+                f"Tesla — {TIMER_MINUTES // 60}hr Timer",
+                f"Your {TIMER_MINUTES}-minute charge timer has elapsed!",
+            ):
+                notified["timer"] = True
+        else:
             notified["timer"] = True
 
-    # ── Charging complete (normal push, not emergency — the car is plugged in
-    # but no longer charging, so nothing is urgent; only on the transition out
-    # of Charging so a long-parked car at Complete doesn't re-notify) ─────────
+    # ── Charging complete — this is the "come unplug the car" alarm. Between
+    # 5-minute polls the car usually jumps straight from Charging to Complete,
+    # so the target branch below can never fire; this transition must carry
+    # the emergency siren itself unless the target alarm already did. Only on
+    # the transition out of Charging so a long-parked car at Complete doesn't
+    # re-notify. ──────────────────────────────────────────────────────────────
     if cs["state"] == "Complete" and last_state == "Charging" and not notified["complete"]:
         if send_pushover(
             "Tesla Fully Charged",
             f"Battery at {cs['level']}% — charging complete!",
-            emergency=False,
+            emergency=not notified["target"],
         ):
             notified["complete"] = True
 
